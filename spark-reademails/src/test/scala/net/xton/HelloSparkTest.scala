@@ -19,10 +19,9 @@ class HelloSparkTest extends SparkUnitSpec {
         ("hit",3),
         ("height",6) ).toDS()
 
-      val rs = ds.agg(count($"*").as[Long]).collect()
+      val rs = ds.agg(count($"*").as[Long]).as[Long].collect()
 
-      println(rs)
-
+      rs shouldBe List(3)
     }
   }
 
