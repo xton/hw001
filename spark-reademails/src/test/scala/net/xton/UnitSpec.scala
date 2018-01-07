@@ -1,14 +1,38 @@
 package net.xton
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SQLContext, SparkSession}
-import org.apache.spark.sql.hive.test.TestHive
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Matchers, WordSpec}
+import java.io.{File, FileOutputStream}
+import java.nio.file.Files
 
-trait UnitSpec extends WordSpec with Matchers  {
+import org.apache.commons.io.{FilenameUtils, IOUtils}
+import org.apache.spark.sql.SparkSession
+import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpec}
+
+trait UnitSpec extends WordSpec with Matchers {
+
+  def writeResourceToTempDirs(dirPrefix: String, paths: String* ): File = {
+    val dir = Files.createTempDirectory(dirPrefix).toFile
+
+    paths foreach { path =>
+      val prefix = FilenameUtils.getBaseName(path)
+      val suffix = {
+        val e = FilenameUtils.getExtension(path)
+        if (e == "") ".data" else "." + e
+      }
+
+      val tf = File.createTempFile(prefix,suffix,dir)
+      val os = new FileOutputStream(tf)
+      val is = getClass.getResourceAsStream(path)
+      IOUtils.copy(is,os)
+      os.close()
+      tf
+    }
+
+    dir
+  }
+
 }
 
-trait SparkUnitSpec extends UnitSpec with BeforeAndAfter with BeforeAndAfterAll {
+trait SparkUnitSpec extends UnitSpec with BeforeAndAfterAll {
 
   private var _spark: SparkSession = _
 

@@ -5,6 +5,7 @@ import org.apache.spark.sql._
 
 
 class HelloSparkTest extends SparkUnitSpec {
+  import spark.implicits._
 
   "a thing" should {
     "say hello" in {
@@ -12,7 +13,6 @@ class HelloSparkTest extends SparkUnitSpec {
     }
 
     "say hello in spark" in {
-      import spark.implicits._
 
       val ds = Seq(
         ("hi",2),
@@ -22,6 +22,23 @@ class HelloSparkTest extends SparkUnitSpec {
       val rs = ds.agg(count($"*").as[Long]).as[Long].collect()
 
       rs shouldBe List(3)
+    }
+
+    "say hello with real files" in {
+      val dir = writeResourceToTempDirs("hello","/words.txt")
+
+      val df = spark.read.textFile(dir.getAbsolutePath)
+        .flatMap(_.split(" +")).toDF("word")
+
+
+      val rs = df.groupBy('word)
+        .agg(count("*") as "tally")
+        .orderBy($"tally".desc)
+        .take(2)
+
+      rs.map(_.getString(0)) should contain theSameElementsAs List("I", "the")
+
+      rs.foreach(println)
     }
   }
 
