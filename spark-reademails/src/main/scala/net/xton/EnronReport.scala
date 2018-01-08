@@ -48,34 +48,76 @@ class EnronReport(val spark: SparkSession, basePath: String) {
     (mostDirected,biggestSpammer)
   }
 
-  // 20 milliseconds
-  val maxLagTime: Long = 20L*60*1000
 
   /** try simple approach of stripping Re:'s to match */
   def question3_1(ds: Dataset[MailRecord] = data): Array[(MailRecord,MailRecord,Long)] = {
-    val results = data.groupByKey(_.subject.replaceFirst(raw"^(?i:re:\s*)+",""))
-      .flatMapGroups{ (group,records) =>
-        val reverseSorted = records.toVector.sortBy(_.date)(Ordering[Long].reverse)
-        val danglingOriginals = mutable.HashMap.empty[String,MailRecord]
-        val replies = List.empty[(MailRecord,MailRecord)]
-
-        reverseSorted.flatMap{ record =>
-          val rs = record.recipients.flatMap{ recipient =>
-            danglingOriginals.remove(recipient) match {
-              case Some(original) if record.date - original.date < maxLagTime =>
-                Seq((original,record,record.date - original.date))
-              case _ => Nil
-            }
-          }
-          danglingOriginals(record.sender) = record
-          rs
-        }
-      }
+    data.groupByKey(_.subject.replaceFirst(raw"^(?i:re:\s*)+",""))
+      .flatMapGroups( (name,records) => EnronReport.findReplies(records))
       .toDF("original","reply","delta").sort($"delta".desc)
       .as[(MailRecord,MailRecord,Long)]
       .take(5)
 
-    results
   }
 
+}
+
+object EnronReport {
+
+  def findReplies(records:TraversableOnce[MailRecord],maxLag:Long =20L*60*1000): Vector[(MailRecord, MailRecord, Long)] = {
+
+    val reverseSorted = records.toVector.sortBy(_.date)(Ordering[Long].reverse)
+    val danglingOriginals = mutable.HashMap.empty[String,MailRecord]
+
+    reverseSorted.flatMap { record =>
+      val rs = record.recipients.flatMap { recipient =>
+        danglingOriginals.remove(recipient) match {
+          case Some(original) if record.date - original.date < maxLag =>
+            Seq((original, record, record.date - original.date))
+          case _ => Nil
+        }
+      }
+      danglingOriginals(record.sender) = record
+      rs
+    }
+  }
+
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder()
+      .master("local[*]")
+      .appName(getClass.getSimpleName)
+      .getOrCreate()
+
+    val report = new EnronReport(spark,args(0))
+    val q1 = report.question1()
+    val q2 = report.question2()
+    val q3 = report.question3_1()
+    val defects = report.data.flatMap( r => r.defects.map((_,r.filename))).take(100)
+
+
+    println()
+    println("Daily Counts:")
+    for((person,day,count) <- q1) {
+      println("% 8d : %s - %s".format(count,person,day))
+    }
+
+    val (mostDirected,biggestSpammer) = q2
+    println()
+    println("Most Broadcasts Sent: %s (%d)".format(biggestSpammer.productIterator.toSeq:_*))
+    println("Most Directs Received: %s (%d)".format(mostDirected.productIterator.toSeq:_*))
+
+    println()
+    println("Fastest Replies:")
+    for(((original,reply,lag),idx) <- q3.zipWithIndex) {
+      println("%d: %s [%s] - %s [%s] <= %s [%s]".format(
+        idx+1,
+        original.date, lag,
+        original.subject, original.filename,
+        reply.subject, reply.filename))
+    }
+
+    println()
+    println("DEFECTS:")
+    defects.foreach(println)
+
+  }
 }

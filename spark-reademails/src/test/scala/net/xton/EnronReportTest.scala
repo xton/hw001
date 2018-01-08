@@ -60,6 +60,7 @@ class EnronReportTest extends SparkUnitSpec {
 
       val rs = report.question3_1()
 
+      println("Did we get anything???")
       rs.foreach(println)
 
     }
