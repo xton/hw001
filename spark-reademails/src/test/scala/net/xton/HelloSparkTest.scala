@@ -40,6 +40,22 @@ class HelloSparkTest extends SparkUnitSpec {
 
       rs.foreach(println)
     }
+
+    "reads a whole file" in {
+      val dir = writeResourceToTempDirs("hello","/words.txt")
+
+      val rs = spark.sparkContext.wholeTextFiles(dir.getAbsolutePath)
+        .flatMap(_._2.split(" +"))
+        .toDF("word")
+        .groupBy('word)
+        .agg(count("*") as 'tally)
+        .orderBy($"tally".desc)
+        .take(2)
+
+      rs.foreach(println)
+      rs.map(_.getString(0)) should contain theSameElementsAs List("I", "the")
+
+    }
   }
 
 }
