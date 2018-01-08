@@ -22,5 +22,7 @@ class MailRecordTest extends UnitSpec {
 
     }
 
+    // TODO: test more cases, edge cases
+
   }
 }
