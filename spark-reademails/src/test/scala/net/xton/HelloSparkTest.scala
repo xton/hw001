@@ -7,7 +7,7 @@ import org.apache.spark.sql._
 class HelloSparkTest extends SparkUnitSpec {
   import spark.implicits._
 
-  "a thing" should {
+  "a test of my setup" should {
     "say hello" in {
       new HelloSpark().hello() shouldBe "Hello World!"
     }
