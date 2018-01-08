@@ -4,19 +4,20 @@ import java.io.{ByteArrayInputStream, InputStream}
 import javax.mail.internet.MimeMessage
 
 import org.apache.commons.mail.util.MimeMessageParser
-import java.sql.Date
 import java.text.SimpleDateFormat
 import java.util.Locale
 
 case class MailRecord(
   sender: String,
-  recipients: Seq[String],
-  date: Date,
+  recipients: Array[String],
+  date: Long,
   day: String,
   subject: String,
   filename: String,
   defects: Seq[String]
 ) {
+
+  lazy val words = Set(subject.split(raw"\s+"):_*)
 }
 
 object MailRecord {
@@ -48,16 +49,16 @@ object MailRecord {
 
     val recipients = Option(msg.getAllRecipients) match {
       case Some(rs) if rs.nonEmpty =>
-        rs.map(_.toString).toSeq
+        rs.map(_.toString)
       case _ =>
         defects ::= "No or empty recipients!"
-        Nil
+        Array.empty[String]
     }
 
     new MailRecord(
       from,
       recipients,
-      new java.sql.Date(rt.getTime),
+      rt.getTime,
       formatter.format(rt),
       orDefault(msg.getSubject,"(no subject)","subject"),
       filename,
