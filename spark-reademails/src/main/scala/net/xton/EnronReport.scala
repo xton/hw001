@@ -18,8 +18,10 @@ class EnronReport(val spark: SparkSession, basePath: String) {
         MailRecord(fileContents,fileName) }
       .toDS()
 
+  lazy val tighterData: Dataset[MailRecord] = data.coalesce(50).as('cachedData).cache()
+
   /** Count of emails received per user per day */
-  def question1(ds: Dataset[MailRecord] = data): Seq[(String,String,Long)] =
+  def question1(ds: Dataset[MailRecord] = tighterData): Seq[(String,String,Long)] =
     ds.flatMap(r => r.recipients.map((_,r.day)))
       // yield (name,day) for each recipient
       .toDF("name","day")
@@ -30,7 +32,7 @@ class EnronReport(val spark: SparkSession, basePath: String) {
       .collect()
       .toSeq
 
-  def question2(ds: Dataset[MailRecord] = data): ((String, Long), (String, Long)) = {
+  def question2(ds: Dataset[MailRecord] = tighterData): ((String, Long), (String, Long)) = {
     val mostDirected = ds
       .filter(_.recipients.length == 1)
       .map(_.recipients.head)
@@ -48,9 +50,8 @@ class EnronReport(val spark: SparkSession, basePath: String) {
     (mostDirected,biggestSpammer)
   }
 
-
   /** try simple approach of stripping Re:'s to match */
-  def question3_1(ds: Dataset[MailRecord] = data): Array[(MailRecord,MailRecord,Long)] = {
+  def question3_1(ds: Dataset[MailRecord] = tighterData): Array[(MailRecord,MailRecord,Long)] = {
     data.groupByKey(_.subject.replaceFirst(raw"^(?i:re:\s*)+",""))
       .flatMapGroups( (name,records) => EnronReport.findReplies(records))
       .toDF("original","reply","delta").sort($"delta".desc)
@@ -63,7 +64,7 @@ class EnronReport(val spark: SparkSession, basePath: String) {
 
 object EnronReport {
 
-  def findReplies(records:TraversableOnce[MailRecord],maxLag:Long =20L*60*1000): Vector[(MailRecord, MailRecord, Long)] = {
+  def findReplies(records:TraversableOnce[MailRecord],maxLag:Long = 20L*60*1000): Vector[(MailRecord, MailRecord, Long)] = {
 
     val reverseSorted = records.toVector.sortBy(_.date)(Ordering[Long].reverse)
     val danglingOriginals = mutable.HashMap.empty[String,MailRecord]
@@ -87,6 +88,8 @@ object EnronReport {
       .appName(getClass.getSimpleName)
       .getOrCreate()
 
+    import spark.implicits._
+
     val report = new EnronReport(spark,args(0))
     val q1 = report.question1()
     val q2 = report.question2()
@@ -108,11 +111,11 @@ object EnronReport {
     println()
     println("Fastest Replies:")
     for(((original,reply,lag),idx) <- q3.zipWithIndex) {
-      println("%d: %s [%s] - %s [%s] <= %s [%s]".format(
+      println("%d: %s [%s] - %s [%s] <= %s [%d - %s]".format(
         idx+1,
         original.date, lag,
         original.subject, original.filename,
-        reply.subject, reply.filename))
+        reply.subject, reply.date, reply.filename))
     }
 
     println()
