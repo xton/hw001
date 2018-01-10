@@ -66,4 +66,53 @@ class EnronReportTest extends SparkUnitSpec {
     }
 
   }
+
+  "the findReplies function" should {
+    import EnronReport._
+
+    val proto = MailRecord("bob",Vector("alice","darren"),5L,"2001-01-05","hello, this is bob","bobs.txt",Nil)
+    val original = proto
+    val reply = proto.copy(sender = "alice", recipients = Vector("bob"), date = 9L, filename = "alices.txt")
+    val reply2 = proto.copy(sender = "alice", recipients = Vector("bob"), date = 10L, filename = "alices2.txt")
+    val nonreply = proto.copy(sender = "corey", recipients = Vector("bob"), date = 7L, filename = "coreys.txt")
+    val otherreply = proto.copy(sender = "darren", recipients = Vector("bob"), date = 13L, filename = "darrens.txt")
+
+    val t2 = MailRecord("george",Vector("alice","darren"),100L,"2001-01-05","hello, this is george","georges.txt",Nil)
+    val t2reply = t2.copy(sender = "alice", recipients = Vector("george"), date = 109L, filename = "alicestogeorge.txt")
+
+    "handle nothing" in {
+      findReplies(Nil) should be an 'empty
+    }
+
+    "handle a single record" in {
+      findReplies(proto :: Nil) should be an 'empty
+    }
+
+    "link two related records" in {
+      findReplies(original :: reply :: Nil) shouldBe Vector((original,reply,4L))
+
+      findReplies(reply :: original :: Nil) shouldBe Vector((original,reply,4L))
+    }
+
+    "chose the right original with competition" in {
+      findReplies(original :: nonreply :: reply2 :: reply :: Nil) shouldBe Vector((original,reply,4L))
+    }
+
+    "produce multiple replies for one original" in {
+      findReplies(original :: nonreply :: reply2 :: reply :: otherreply :: Nil) shouldBe
+        Vector((original,reply,4L), (original,otherreply,8L))
+
+    }
+
+    "handle multiple threads" in {
+      findReplies(original :: t2 :: reply2 :: t2reply :: Nil) shouldBe
+        Vector((original,reply2,5L), (t2,t2reply,9L))
+    }
+    
+    "ignore records two far apart" in {
+      findReplies(original :: reply :: Nil, maxLag = 2L) should be an 'empty
+    }
+
+  }
+
 }

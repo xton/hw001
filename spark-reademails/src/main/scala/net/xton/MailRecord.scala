@@ -9,7 +9,7 @@ import java.util.Locale
 
 case class MailRecord(
   sender: String,
-  recipients: Array[String],
+  recipients: Vector[String],
   date: Long,
   day: String,
   subject: String,
@@ -57,7 +57,7 @@ object MailRecord {
 
     new MailRecord(
       from,
-      recipients,
+      recipients.toVector,
       rt.getTime,
       formatter.format(rt),
       orDefault(msg.getSubject,"(no subject)","subject"),

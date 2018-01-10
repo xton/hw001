@@ -42,7 +42,7 @@ class EnronReport(val spark: SparkSession, basePath: String) {
 
     val biggestSpammer = ds
       .filter(_.recipients.length > 1)
-        .map(_.sender)
+      .map(_.sender)
       .groupByKey(identity).count()
       .toDF("name","tally").sort($"tally".desc)
       .as[(String,Long)].head()
@@ -64,20 +64,30 @@ class EnronReport(val spark: SparkSession, basePath: String) {
 
 object EnronReport {
 
+  /**
+    *
+    * @param records
+    * @param maxLag
+    * @return (original, reply, replyLag)
+    */
   def findReplies(records:TraversableOnce[MailRecord],maxLag:Long = 20L*60*1000): Vector[(MailRecord, MailRecord, Long)] = {
 
-    val reverseSorted = records.toVector.sortBy(_.date)(Ordering[Long].reverse)
-    val danglingOriginals = mutable.HashMap.empty[String,MailRecord]
+    val reverseSorted = records.toVector.sortBy(_.date)
+    val danglingOriginals = mutable.HashMap.empty[(String,String),MailRecord]
+
+//    println(reverseSorted.map(_.filename))
 
     reverseSorted.flatMap { record =>
       val rs = record.recipients.flatMap { recipient =>
-        danglingOriginals.remove(recipient) match {
+        danglingOriginals.remove(recipient,record.sender) match {
+            // TODO: making assumption about allrecipients == original thread starter here... probably not valid
           case Some(original) if record.date - original.date < maxLag =>
+//            println(s"${original.filename} -> ${record.filename}")
             Seq((original, record, record.date - original.date))
           case _ => Nil
         }
       }
-      danglingOriginals(record.sender) = record
+      record.recipients.foreach(r => danglingOriginals((record.sender,r)) = record)
       rs
     }
   }
