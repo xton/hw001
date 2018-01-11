@@ -90,9 +90,11 @@ def main(args):
                 # unbounded number of messages assigned to the default time.
                 break
 
+            # note that we're filtering out suspect replies
             if len(first_candidate.subject.strip()) > 0 and \
                     record.sender in first_candidate.recipients and \
                     first_candidate.sender in record.recipients and \
+                    response_lag > timedelta(seconds=0) and \
                     first_candidate.words <= record.words:
 
                 fast_replies.append((record, response_lag, first_candidate))

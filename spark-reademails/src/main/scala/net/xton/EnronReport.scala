@@ -60,48 +60,40 @@ class EnronReport(val spark: SparkSession, basePath: String) {
       .take(5)
   }
 
-  /** try simple approach of stripping Re:'s to match */
-  def question3_2(ds: Dataset[MailRecord] = tighterData): Array[(Long, String, Long, String, String)] = {
+  def question3_2(ds: Dataset[MailRecord] = tighterData): Array[(MailRecord, MailRecord, Long)] = {
     ds.toDF().createOrReplaceTempView("base")
 
-    // create a simpler projection with canonical subject and a few other
-    // required fields, exploding the recipients out to individual rows.
     spark.sql(
       """
-        |select regexp_replace(subject,'^(?i:re:\\s*)+','') as subject,
-        | sender, recipient, date
+        |select regexp_replace(subject,'^(?i:re:\\s*)+','') as subject, recipient, sender, struct(base.*) as record
         | FROM base
-        | LATERAL VIEW explode(recipients) reciptable AS recipient
+        | LATERAL VIEW explode(recipients) recipients_table AS recipient
       """.stripMargin).createOrReplaceTempView("simple")
 
     // self-join emails with replies. reply must be in order an with less
     // than an hour lag.
     spark.sql(
       """
-        |select l.sender, l.recipient, (r.date - l.date) as lag,
-        |   l.subject, l.date
+        |select l.record as original, r.record as reply, (r.record.date - l.record.date) as lag
         |from simple l join simple r on
         | l.subject = r.subject and
-        | l.sender = r.recipient and
         | l.recipient = r.sender and
-        | l.sender != l.recipient and
-        | l.date <= r.date and r.date - l.date < 3600000
+        | l.sender = r.recipient and
+        | l.record.filename != r.record.filename and
+        | l.record.date < r.record.date and r.record.date - l.record.date < 3600000
       """.stripMargin).createOrReplaceTempView("replies")
 
 
-    // TODO: use dense_rank() == 1 to eliminate duplicate replies
-    // todo: fuckit, use grouping? i've been working on this too long.
     spark.sql(
       """
-        |select date, subject, lag, sender, recipient from (
-        | select date, subject, lag, sender, recipient,
-        |   dense_rank() over (partition by date, subject, sender, recipient order by lag) as ranking
-        | from replies
+        |select original, reply, lag from (
+        |  select *,
+        |     dense_rank() over (partition by original.date, original.subject, original.sender, reply.sender order by lag) as ranking
+        |   from replies
         | ) x where ranking = 1
         | order by lag limit 5
-      """.stripMargin).as[(Long,String,Long,String,String)].collect()
+      """.stripMargin).as[(MailRecord,MailRecord,Long)].collect()
   }
-
 }
 
 object EnronReport {
@@ -123,7 +115,7 @@ object EnronReport {
       val rs = record.recipients.flatMap { recipient =>
         danglingOriginals.remove(recipient,record.sender) match {
             // TODO: making assumption about allrecipients == original thread starter here... probably not valid
-          case Some(original) if record.date - original.date < maxLag =>
+          case Some(original) if record.date - original.date < maxLag && record.date > original.date =>
 //            println(s"${original.filename} -> ${record.filename}")
             Seq((original, record, record.date - original.date))
           case _ => Nil
@@ -176,10 +168,16 @@ object EnronReport {
         reply.subject, java.time.Instant.ofEpochMilli(reply.date).toString, reply.filename))
     }
 
-
     println()
-    println("Fastest Replies (SQL)")
-    q3_2.foreach(println)
+    println("Fastest Replies (2):")
+    for(((original,reply,lag),idx) <- q3_2.zipWithIndex) {
+      println("%s: %s [%s] - %s [%s] <= %s [%s - %s]".format(
+        idx+1,
+        java.time.Instant.ofEpochMilli(original.date).toString,
+        Duration.ofMillis(lag).toString,
+        original.subject, original.filename,
+        reply.subject, java.time.Instant.ofEpochMilli(reply.date).toString, reply.filename))
+    }
 
     println()
     println("DEFECTS:")
