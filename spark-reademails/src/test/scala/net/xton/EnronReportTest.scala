@@ -73,6 +73,17 @@ class EnronReportTest extends SparkUnitSpec {
 
     }
 
+    "answer question 3 with just sql" in {
+      val dir = writeResourceToTempDirs("q3.2", allFiles ++ threadedFiles:_*)
+
+      val report = new EnronReport(spark, dir.getAbsolutePath)
+
+      val rs = report.question3_2()
+
+      rs.map(_._2) shouldBe Array(236000L,240000L)
+
+    }
+
   }
 
   "the findReplies function" should {

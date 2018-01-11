@@ -61,20 +61,39 @@ class EnronReport(val spark: SparkSession, basePath: String) {
   }
 
   /** try simple approach of stripping Re:'s to match */
-  def question3_2(ds: Dataset[MailRecord] = tighterData): Array[(MailRecord,MailRecord,Long)] = {
-    ds.toDF().createOrReplaceTempView("dat")
+  def question3_2(ds: Dataset[MailRecord] = tighterData): Array[(String, Long, String, String)] = {
+    ds.toDF().createOrReplaceTempView("base")
+
+    // create a simpler projection with canonical subject and a few other
+    // required fields, exploding the recipients out to individual rows.
     spark.sql(
       """
-        |
-      """.stripMargin)
+        |select regexp_replace(subject,'^(?i:re:\\s*)+','') as subject,
+        | sender, recipient, date
+        | FROM base
+        | LATERAL VIEW explode(recipients) reciptable AS recipient
+      """.stripMargin).createOrReplaceTempView("simple")
+
+    // self-join emails with replies. reply must be in order an with less
+    // than an hour lag.
+    spark.sql(
+      """
+        |select l.sender, l.recipient, (r.date - l.date) as lag,
+        |   l.subject
+        |from simple l join simple r on
+        | l.subject = r.subject and
+        | l.sender = r.recipient and
+        | l.recipient = r.sender and
+        | l.date < r.date and r.date - l.date < 3600000
+      """.stripMargin).createOrReplaceTempView("replies")
 
 
-    ds.groupByKey(_.subject.replaceFirst(raw"^(?i:re:\s*)+",""))
-      .flatMapGroups( (name,records) => EnronReport.findReplies(records))
-      .toDF("original","reply","delta").sort($"delta")
-      .as[(MailRecord,MailRecord,Long)]
-      .take(5)
-
+    spark.sql(
+      """
+        |select subject, lag, sender, recipient
+        |from replies
+        |order by lag limit 5
+      """.stripMargin).as[(String,Long,String,String)].collect()
   }
 
 }
