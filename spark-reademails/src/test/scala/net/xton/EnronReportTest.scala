@@ -80,7 +80,7 @@ class EnronReportTest extends SparkUnitSpec {
 
       val rs = report.question3_2()
 
-      rs.map(_._2) shouldBe Array(236000L,240000L)
+      rs.map(_._3) shouldBe Array(236000L,240000L)
 
     }
 

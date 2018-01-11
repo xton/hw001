@@ -45,6 +45,7 @@ trait SparkUnitSpec extends UnitSpec with BeforeAndAfterAll {
       _spark = SparkSession.builder()
         .master("local[*]")
         .appName(getClass.getSimpleName)
+          //.enableHiveSupport()
         .getOrCreate()
     }
     _spark

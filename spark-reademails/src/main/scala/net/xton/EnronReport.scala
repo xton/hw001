@@ -61,7 +61,7 @@ class EnronReport(val spark: SparkSession, basePath: String) {
   }
 
   /** try simple approach of stripping Re:'s to match */
-  def question3_2(ds: Dataset[MailRecord] = tighterData): Array[(String, Long, String, String)] = {
+  def question3_2(ds: Dataset[MailRecord] = tighterData): Array[(Long, String, Long, String, String)] = {
     ds.toDF().createOrReplaceTempView("base")
 
     // create a simpler projection with canonical subject and a few other
@@ -79,21 +79,25 @@ class EnronReport(val spark: SparkSession, basePath: String) {
     spark.sql(
       """
         |select l.sender, l.recipient, (r.date - l.date) as lag,
-        |   l.subject
+        |   l.subject, l.date
         |from simple l join simple r on
         | l.subject = r.subject and
         | l.sender = r.recipient and
         | l.recipient = r.sender and
-        | l.date < r.date and r.date - l.date < 3600000
+        | l.date <= r.date and r.date - l.date < 3600000
       """.stripMargin).createOrReplaceTempView("replies")
 
 
+    // TODO: use dense_rank() == 1 to eliminate duplicate replies
     spark.sql(
       """
-        |select subject, lag, sender, recipient
-        |from replies
-        |order by lag limit 5
-      """.stripMargin).as[(String,Long,String,String)].collect()
+        |select date, subject, lag, sender, recipient from (
+        | select date, subject, lag, sender, recipient,
+        |   dense_rank() over (partition by date, subject, sender, recipient order by lag) as ranking
+        | from replies
+        | ) x where ranking = 1
+        | order by lag limit 5
+      """.stripMargin).as[(Long,String,Long,String,String)].collect()
   }
 
 }
@@ -141,6 +145,7 @@ object EnronReport {
     val q1 = report.question1()
     val q2 = report.question2()
     val q3 = report.question3_1()
+    val q3_2 = report.question3_2()
     val defects = report.data.flatMap( r => r.defects.map((_,r.filename))).take(100)
 
 
@@ -165,6 +170,11 @@ object EnronReport {
         original.subject, original.filename,
         reply.subject, java.time.Instant.ofEpochMilli(reply.date).toString, reply.filename))
     }
+
+
+    println()
+    println("Fastest Replies (SQL)")
+    q3_2.foreach(println)
 
     println()
     println("DEFECTS:")
