@@ -11,7 +11,7 @@ class EnronReportTest extends SparkUnitSpec {
 
     val threadedFiles = Seq("/228996.txt","/228911.txt","/122923.txt","/122926.txt")
 
-    "extract data" in {
+    "extract one record" in {
       val dir = writeResourceToTempDirs("er","/115317.txt")
 
       val report = new EnronReport(spark,dir.getAbsolutePath)
@@ -20,14 +20,25 @@ class EnronReportTest extends SparkUnitSpec {
 
       sender shouldBe "jeff.dasovich@enron.com"
 
+      // TODO: test all attributes
     }
 
     "extract moar data" in {
+      /**
+        * Make sure we can run the extract function on a larger set of real data.
+        * For production code, we'd more carefully test all edge cases and
+        * default values and validate each one.
+        *
+        * For this exercise, we're happy to just make sure the code doesn't explode
+        * and is consistent with our alternate implementation.
+        */
       val dir = writeResourceToTempDirs("larger", allFiles:_*)
 
       val report = new EnronReport(spark, dir.getAbsolutePath)
 
       report.data.count() shouldBe 11L
+
+      // TODO: test all attributes
     }
 
     "answer question 1" in {
@@ -35,11 +46,11 @@ class EnronReportTest extends SparkUnitSpec {
 
       val report = new EnronReport(spark, dir.getAbsolutePath)
 
-      val rs = report.question1().take(4) shouldBe Seq(
-        ("danny.mccarty@enron.com","2001-03-05",4L),
+      val rs = report.question1().take(4) should contain theSameElementsAs Seq(
+        ("danny.mccarty@enron.com","2001-03-05",2L),
         ("darrell.schoolcraft@enron.com","2001-03-05",2L),
-        ("darrell.schoolcraft@enron.com","2001-03-06",4L),
-        ("doornbos@socrates.berkeley.edu","2000-08-04",2L) )
+        ("darrell.schoolcraft@enron.com","2001-03-06",2L),
+        ("doornbos@socrates.berkeley.edu","2000-08-04",1L) )
 
 //      report.question1().foreach(println)
 
@@ -61,9 +72,6 @@ class EnronReportTest extends SparkUnitSpec {
       val report = new EnronReport(spark, dir.getAbsolutePath)
 
       val rs = report.question3_1()
-
-//      println("Did we get anything???")
-//      rs.foreach(println)
 
       // NB: this is a verrrry basic test. For production code we'd have much more elaborate
       //     testing here. For this quick project I've just manually confirmed that both the python

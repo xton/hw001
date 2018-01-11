@@ -12,6 +12,11 @@ import scala.collection.mutable
 class EnronReport(val spark: SparkSession, basePath: String) {
   import spark.implicits._
 
+  /** read in each file.
+    *
+    * this is *not* very performant in spark: too much work done
+    * examining each file and potentially setting up a task per file.
+    */
   lazy val data: Dataset[MailRecord] =
     spark.sparkContext.wholeTextFiles(basePath)
       .filter(_._1.endsWith(".txt"))
@@ -19,6 +24,8 @@ class EnronReport(val spark: SparkSession, basePath: String) {
         MailRecord(fileContents,fileName) }
       .toDS()
 
+  /** attempt to mitigate the smallfile problem and cache the datasource for
+    * repeat queries */
   lazy val tighterData: Dataset[MailRecord] = data.coalesce(20).as('cachedData).cache()
 
   /** Count of emails received per user per day */
@@ -33,14 +40,17 @@ class EnronReport(val spark: SparkSession, basePath: String) {
       .collect()
       .toSeq
 
+  /** both of these use a simple filter -> group -> sort -> first pattern */
   def question2(ds: Dataset[MailRecord] = tighterData): ((String, Long), (String, Long)) = {
+    // the recipient who received the most direct messages
     val mostDirected = ds
       .filter(_.recipients.length == 1)
       .map(_.recipients.head)
       .groupByKey(identity).count()
-      .toDF("name","tally").sort($"tally".desc)
+      .toDF("name","tally").sort($"tally".desc) // it bothers me that there's no way to sort a dataset on an unnamed column
       .as[(String,Long)].head()
 
+    // the sender who sent the most broadcase messages
     val biggestSpammer = ds
       .filter(_.recipients.length > 1)
       .map(_.sender)
@@ -51,7 +61,10 @@ class EnronReport(val spark: SparkSession, basePath: String) {
     (mostDirected,biggestSpammer)
   }
 
-  /** try simple approach of stripping Re:'s to match */
+  /** A simple approach: group by the original subject name and
+    * then scan each group for matches. Assumes each whole thread
+    * fits in memory.
+    **/
   def question3_1(ds: Dataset[MailRecord] = tighterData): Array[(MailRecord,MailRecord,Long)] = {
     ds.groupByKey(_.subject.replaceFirst(raw"^(?i:re:\s*)+",""))
       .flatMapGroups( (name,records) => EnronReport.findReplies(records))
@@ -60,6 +73,16 @@ class EnronReport(val spark: SparkSession, basePath: String) {
       .take(5)
   }
 
+  /** SQL-driven approach.
+    *
+    * Explode out the recipients array to create one row per
+    * sender-recipient pair, then self-join on those plus original title,
+    * finally choose the quickest reply among all candidates.
+    *
+    * While this makes fewer assumptions about thread sizes, it makes many
+    * more assumptions about the implementation of JOIN in the underlying
+    * SQL engine.
+    */
   def question3_2(ds: Dataset[MailRecord] = tighterData): Array[(MailRecord, MailRecord, Long)] = {
     ds.toDF().createOrReplaceTempView("base")
 
@@ -70,8 +93,8 @@ class EnronReport(val spark: SparkSession, basePath: String) {
         | LATERAL VIEW explode(recipients) recipients_table AS recipient
       """.stripMargin).createOrReplaceTempView("simple")
 
-    // self-join emails with replies. reply must be in order an with less
-    // than an hour lag.
+    // self-join emails with replies. reply must come after original but no
+    // more than an hour later.
     spark.sql(
       """
         |select l.record as original, r.record as reply, (r.record.date - l.record.date) as lag
@@ -84,6 +107,8 @@ class EnronReport(val spark: SparkSession, basePath: String) {
       """.stripMargin).createOrReplaceTempView("replies")
 
 
+    // choose the fastest reply for each original message.
+    // choose the fastest 5 of those.
     spark.sql(
       """
         |select original, reply, lag from (
@@ -98,7 +123,12 @@ class EnronReport(val spark: SparkSession, basePath: String) {
 
 object EnronReport {
 
-  /**
+  /** Assuming we have a group of reports with the same subject,
+    * scan back in time looking for originals. Unlike the Python
+    * implementation, we do just a single scan and keep a dictionary
+    * of replies needing originals. This may have better performance than
+    * the python, but still could have trouble with very long threads or
+    * commonly-used email subjects.
     *
     * @param records
     * @param maxLag
@@ -126,6 +156,9 @@ object EnronReport {
     }
   }
 
+  /**
+    * A quick driver function to run the query and dump the output.
+    */
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder()
       .master("local[*]")

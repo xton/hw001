@@ -7,6 +7,7 @@ import org.apache.commons.mail.util.MimeMessageParser
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+/** This case class determines our data model for all future queries */
 case class MailRecord(
   sender: String,
   recipients: Vector[String],
@@ -21,6 +22,11 @@ case class MailRecord(
 }
 
 object MailRecord {
+  /** factory method for creating MailRecords from raw text
+    *
+    * implements default values for missing elements and builds
+    * up an array of defects when that happens.
+    **/
   def apply(input: InputStream,filename:String): MailRecord = {
     var defects = Nil:List[String]
 
@@ -36,7 +42,7 @@ object MailRecord {
     val parser = new MimeMessageParser(msg)
     parser.parse()
 
-    val rt = orDefault(msg.getSentDate,new java.util.Date(),"date")
+    val sentDate = orDefault(msg.getSentDate,new java.util.Date(),"date")
     val formatter = new SimpleDateFormat("yyyy-MM-dd",Locale.US)
 
     val from = Option(msg.getFrom) match {
@@ -58,8 +64,8 @@ object MailRecord {
     new MailRecord(
       from,
       recipients.toVector,
-      rt.getTime,
-      formatter.format(rt),
+      sentDate.getTime,
+      formatter.format(sentDate),
       orDefault(msg.getSubject,"(no subject)","subject"),
       filename,
       defects)

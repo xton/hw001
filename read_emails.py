@@ -46,6 +46,7 @@ def read_mail_file(filename):
 
 
 def main(args):
+    # read every file given as an argument
     data = map(read_mail_file,args)
 
     emails_per_person_day = defaultdict(lambda: 0)
@@ -53,9 +54,11 @@ def main(args):
     broadcasted = defaultdict(lambda: 0)
 
     for record in data:
+        # question 1
         for p in record.recipients:
             emails_per_person_day[(p, record.day)] += 1
 
+        # question 2
         if len(record.recipients) > 1:
             broadcasted[record.sender] += 1
         elif len(record.recipients) == 1:
@@ -76,8 +79,14 @@ def main(args):
 
     print
     print "Fastest Replies:"
-    sorted_data = sorted(data, key=lambda x: x.msgdate)
 
+    # for each message, search backwards in time until we find a message
+    # that meets the requirement of a reply-original. We keep this from
+    # being an o(n^2) operation by setting a cap on the amount we'll search back.
+    #
+    # this hack is only valid so long as we're only interested in the fastest
+    # replies and messages are not pathologically distributed over time.
+    sorted_data = sorted(data, key=lambda x: x.msgdate)
     fast_replies = []
     for idx, record in enumerate(sorted_data):
         cursor = idx - 1
