@@ -19,7 +19,7 @@ class EnronReport(val spark: SparkSession, basePath: String) {
         MailRecord(fileContents,fileName) }
       .toDS()
 
-  lazy val tighterData: Dataset[MailRecord] = data.coalesce(50).as('cachedData).cache()
+  lazy val tighterData: Dataset[MailRecord] = data.coalesce(20).as('cachedData).cache()
 
   /** Count of emails received per user per day */
   def question1(ds: Dataset[MailRecord] = tighterData): Seq[(String,String,Long)] =
@@ -53,7 +53,23 @@ class EnronReport(val spark: SparkSession, basePath: String) {
 
   /** try simple approach of stripping Re:'s to match */
   def question3_1(ds: Dataset[MailRecord] = tighterData): Array[(MailRecord,MailRecord,Long)] = {
-    data.groupByKey(_.subject.replaceFirst(raw"^(?i:re:\s*)+",""))
+    ds.groupByKey(_.subject.replaceFirst(raw"^(?i:re:\s*)+",""))
+      .flatMapGroups( (name,records) => EnronReport.findReplies(records))
+      .toDF("original","reply","delta").sort($"delta")
+      .as[(MailRecord,MailRecord,Long)]
+      .take(5)
+  }
+
+  /** try simple approach of stripping Re:'s to match */
+  def question3_2(ds: Dataset[MailRecord] = tighterData): Array[(MailRecord,MailRecord,Long)] = {
+    ds.toDF().createOrReplaceTempView("dat")
+    spark.sql(
+      """
+        |
+      """.stripMargin)
+
+
+    ds.groupByKey(_.subject.replaceFirst(raw"^(?i:re:\s*)+",""))
       .flatMapGroups( (name,records) => EnronReport.findReplies(records))
       .toDF("original","reply","delta").sort($"delta")
       .as[(MailRecord,MailRecord,Long)]
@@ -96,6 +112,7 @@ object EnronReport {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder()
       .master("local[*]")
+       //   .enableHiveSupport()
       .appName(getClass.getSimpleName)
       .getOrCreate()
 
@@ -122,11 +139,12 @@ object EnronReport {
     println()
     println("Fastest Replies:")
     for(((original,reply,lag),idx) <- q3.zipWithIndex) {
-      println("%d: %s [%s] - %s [%s] <= %s [%d - %s]".format(
+      println("%s: %s [%s] - %s [%s] <= %s [%s - %s]".format(
         idx+1,
-        original.date, Duration.ofMillis(lag).toString,
+        java.time.Instant.ofEpochMilli(original.date).toString,
+        Duration.ofMillis(lag).toString,
         original.subject, original.filename,
-        reply.subject, reply.date, reply.filename))
+        reply.subject, java.time.Instant.ofEpochMilli(reply.date).toString, reply.filename))
     }
 
     println()
