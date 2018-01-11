@@ -50,7 +50,7 @@ class EnronReport(val spark: SparkSession, basePath: String) {
       .toDF("name","tally").sort($"tally".desc) // it bothers me that there's no way to sort a dataset on an unnamed column
       .as[(String,Long)].head()
 
-    // the sender who sent the most broadcase messages
+    // the sender who sent the most broadcast messages
     val biggestSpammer = ds
       .filter(_.recipients.length > 1)
       .map(_.sender)
