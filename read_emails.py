@@ -90,8 +90,7 @@ def main(args):
                 # unbounded number of messages assigned to the default time.
                 break
 
-            if response_lag > timedelta(seconds=0) and \
-                    len(first_candidate.subject.strip()) > 0 and \
+            if len(first_candidate.subject.strip()) > 0 and \
                     record.sender in first_candidate.recipients and \
                     first_candidate.words <= record.words:
 

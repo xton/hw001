@@ -9,6 +9,8 @@ class EnronReportTest extends SparkUnitSpec {
       "/106590.txt", "/109359.txt", "/110549.txt", "/113953.txt",
       "/114087.txt", "/114503.txt", "/115317.txt")
 
+    val threadedFiles = Seq("/228996.txt","/228911.txt","/122923.txt","/122926.txt")
+
     "extract data" in {
       val dir = writeResourceToTempDirs("er","/115317.txt")
 
@@ -54,14 +56,20 @@ class EnronReportTest extends SparkUnitSpec {
     }
 
     "answer question 3" in {
-      val dir = writeResourceToTempDirs("q3.1", allFiles:_*)
+      val dir = writeResourceToTempDirs("q3.1", allFiles ++ threadedFiles:_*)
 
       val report = new EnronReport(spark, dir.getAbsolutePath)
 
       val rs = report.question3_1()
 
-      println("Did we get anything???")
-      rs.foreach(println)
+//      println("Did we get anything???")
+//      rs.foreach(println)
+
+      // NB: this is a verrrry basic test. For production code we'd have much more elaborate
+      //     testing here. For this quick project I've just manually confirmed that both the python
+      //     and spark versions produce the same results.
+
+      rs.map(_._3) shouldBe Array(236000L,240000L)
 
     }
 
