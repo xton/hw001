@@ -108,7 +108,7 @@ class EnronReportTest extends SparkUnitSpec {
       findReplies(original :: t2 :: reply2 :: t2reply :: Nil) shouldBe
         Vector((original,reply2,5L), (t2,t2reply,9L))
     }
-    
+
     "ignore records two far apart" in {
       findReplies(original :: reply :: Nil, maxLag = 2L) should be an 'empty
     }

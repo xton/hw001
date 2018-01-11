@@ -1,6 +1,7 @@
 package net.xton
 
 import java.sql.{Date, Timestamp}
+import java.time.Duration
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.functions._
@@ -54,7 +55,7 @@ class EnronReport(val spark: SparkSession, basePath: String) {
   def question3_1(ds: Dataset[MailRecord] = tighterData): Array[(MailRecord,MailRecord,Long)] = {
     data.groupByKey(_.subject.replaceFirst(raw"^(?i:re:\s*)+",""))
       .flatMapGroups( (name,records) => EnronReport.findReplies(records))
-      .toDF("original","reply","delta").sort($"delta".desc)
+      .toDF("original","reply","delta").sort($"delta")
       .as[(MailRecord,MailRecord,Long)]
       .take(5)
 
@@ -123,7 +124,7 @@ object EnronReport {
     for(((original,reply,lag),idx) <- q3.zipWithIndex) {
       println("%d: %s [%s] - %s [%s] <= %s [%d - %s]".format(
         idx+1,
-        original.date, lag,
+        original.date, Duration.ofMillis(lag).toString,
         original.subject, original.filename,
         reply.subject, reply.date, reply.filename))
     }
