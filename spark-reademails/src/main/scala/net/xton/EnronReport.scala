@@ -84,11 +84,13 @@ class EnronReport(val spark: SparkSession, basePath: String) {
         | l.subject = r.subject and
         | l.sender = r.recipient and
         | l.recipient = r.sender and
+        | l.sender != l.recipient and
         | l.date <= r.date and r.date - l.date < 3600000
       """.stripMargin).createOrReplaceTempView("replies")
 
 
     // TODO: use dense_rank() == 1 to eliminate duplicate replies
+    // todo: fuckit, use grouping? i've been working on this too long.
     spark.sql(
       """
         |select date, subject, lag, sender, recipient from (
@@ -148,6 +150,9 @@ object EnronReport {
     val q3_2 = report.question3_2()
     val defects = report.data.flatMap( r => r.defects.map((_,r.filename))).take(100)
 
+    if(args.length > 1) {
+      report.tighterData.write.parquet(args(1))
+    }
 
     println()
     println("Daily Counts:")

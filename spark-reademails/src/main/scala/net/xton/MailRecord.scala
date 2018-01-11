@@ -49,7 +49,7 @@ object MailRecord {
 
     val recipients = Option(msg.getAllRecipients) match {
       case Some(rs) if rs.nonEmpty =>
-        rs.map(_.toString)
+        rs.map(_.toString).distinct
       case _ =>
         defects ::= "No or empty recipients!"
         Array.empty[String]
