@@ -130,7 +130,7 @@ object EnronReport {
     * of replies needing originals. This may have better performance than
     * the python, but still could have trouble with very long threads or
     * commonly-used email subjects.
-    * 
+    *
     * Note that this method live in the companion object to avoid
     * spark serialization errors.
     *

@@ -26,9 +26,9 @@ The above solution was fine, but it didn't use SQL or Spark or MapReduce or anyt
 
 Run like:
 
-`./spark-reademails/enron_report.sh ~/src/interview/slack-hw-data/enron_with_categories/\*`  (note escaped asterisk)
+`./spark-reademails/enron_report.sh path/to/unpacked/archive/enron_with_categories/\*`  (note escaped asterisk)
 
-I've used the Apache Commons mime parser before so I used it again here. 
+I've used the Apache Commons MIME parser before so I used it again here. 
 
 For file input, I used `sc.wholeTextFiles(...)` for expediency. It is /not/ efficient when used like this. The per-file cost as Spark builds up its splits is way too high. For production code I would probably preprocess the individual files into a small set of sequence files or something similar before handing off to Spark. Or depending on my goals, I might unpack the tarball within Spark itself using Apache Commons /TarArchiveInputStream/.  
 
