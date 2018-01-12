@@ -141,14 +141,10 @@ object EnronReport {
     val reverseSorted = records.toVector.sortBy(_.date)
     val danglingOriginals = mutable.HashMap.empty[(String,String),MailRecord]
 
-//    println(reverseSorted.map(_.filename))
-
     reverseSorted.flatMap { record =>
       val rs = record.recipients.flatMap { recipient =>
         danglingOriginals.remove(recipient,record.sender) match {
-            // TODO: making assumption about allrecipients == original thread starter here... probably not valid
           case Some(original) if record.date - original.date < maxLag && record.date > original.date =>
-//            println(s"${original.filename} -> ${record.filename}")
             Seq((original, record, record.date - original.date))
           case _ => Nil
         }
