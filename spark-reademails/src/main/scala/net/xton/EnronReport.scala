@@ -40,23 +40,21 @@ class EnronReport(val spark: SparkSession, basePath: String) {
       .collect()
       .toSeq
 
-  /** both of these use a simple filter -> group -> sort -> first pattern */
+  /** both of these use a simple filter -> group -> max pattern */
   def question2(ds: Dataset[MailRecord] = tighterData): ((String, Long), (String, Long)) = {
     // the recipient who received the most direct messages
     val mostDirected = ds
       .filter(_.recipients.length == 1)
       .map(_.recipients.head)
       .groupByKey(identity).count()
-      .toDF("name","tally").sort($"tally".desc) // it bothers me that there's no way to sort a dataset on an unnamed column
-      .as[(String,Long)].head()
+      .reduce( (a,b) => if (a._2 >= b._2) a else b) // max by count
 
     // the sender who sent the most broadcast messages
     val biggestSpammer = ds
       .filter(_.recipients.length > 1)
       .map(_.sender)
       .groupByKey(identity).count()
-      .toDF("name","tally").sort($"tally".desc)
-      .as[(String,Long)].head()
+      .reduce( (a,b) => if (a._2 >= b._2) a else b) // max by count
 
     (mostDirected,biggestSpammer)
   }
@@ -68,9 +66,12 @@ class EnronReport(val spark: SparkSession, basePath: String) {
   def question3_1(ds: Dataset[MailRecord] = tighterData): Array[(MailRecord,MailRecord,Long)] = {
     ds.groupByKey(_.subject.replaceFirst(raw"^(?i:re:\s*)+",""))
       .flatMapGroups( (name,records) => EnronReport.findReplies(records))
-      .toDF("original","reply","delta").sort($"delta")
-      .as[(MailRecord,MailRecord,Long)]
-      .take(5)
+      .rdd.takeOrdered(5)(Ordering.by(_._3))
+
+    // possibly the below will be optimized to the above, but just in case...
+//      .toDF("original","reply","delta").sort($"delta")
+//      .as[(MailRecord,MailRecord,Long)]
+//      .take(5)
   }
 
   /** SQL-driven approach.
@@ -129,9 +130,10 @@ object EnronReport {
     * of replies needing originals. This may have better performance than
     * the python, but still could have trouble with very long threads or
     * commonly-used email subjects.
+    * 
+    * Note that this method live in the companion object to avoid
+    * spark serialization errors.
     *
-    * @param records
-    * @param maxLag
     * @return (original, reply, replyLag)
     */
   def findReplies(records:TraversableOnce[MailRecord],maxLag:Long = 20L*60*1000): Vector[(MailRecord, MailRecord, Long)] = {
@@ -182,7 +184,7 @@ object EnronReport {
     println()
     println("Daily Counts:")
     for((person,day,count) <- q1) {
-      println("% 8d : %s - %s".format(count,person,day))
+      println("% 8d : %s - %s".format(count,day,person))
     }
 
     val (mostDirected,biggestSpammer) = q2
